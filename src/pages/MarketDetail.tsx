@@ -1,27 +1,73 @@
 import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Bookmark, Share2, Calendar, Zap } from "lucide-react";
+import { ArrowLeft, Bookmark, Share2, Calendar, Zap, AlertCircle } from "lucide-react";
 import { Header } from "@/components/Header";
 import { PriceChart } from "@/components/PriceChart";
 import { TradingPanel } from "@/components/TradingPanel";
 import { OutcomeTable } from "@/components/OutcomeTable";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   mockMarkets,
   generatePriceHistory,
   formatVolume,
   MarketOutcome,
 } from "@/data/mockMarkets";
+import { useMarketData } from "@/hooks/useMarketData";
+import { useWallet } from "@/hooks/useWallet";
+import { getMarketContractAddress } from "@/web3/marketConfig";
+import { Outcome } from "@/web3/prediction";
+import { formatUnits } from "ethers";
+import { DEFAULT_CONFIG } from "@/web3/marketConfig";
 
 const MarketDetail = () => {
   const { id } = useParams<{ id: string }>();
   const market = mockMarkets.find((m) => m.id === id);
   const [selectedOutcome, setSelectedOutcome] = useState<MarketOutcome | undefined>();
+  const { provider, address, isConnected } = useWallet();
+  const contractAddress = id ? getMarketContractAddress(id) : null;
+  
+  const {
+    marketInfo,
+    userBalances,
+    probabilities,
+    currentPrice,
+    loading: marketDataLoading,
+    error: marketDataError,
+  } = useMarketData(id || "", provider, address);
 
   const priceHistory = useMemo(() => {
     if (!market) return [];
     return generatePriceHistory(market);
   }, [market]);
+
+  // Utiliser les données réelles si disponibles, sinon les données mock
+  const displayMarket = useMemo(() => {
+    if (!market) return null;
+    
+    if (marketInfo && probabilities) {
+      return {
+        ...market,
+        outcomes: [
+          {
+            ...market.outcomes[0],
+            probability: probabilities.yesProbability,
+          },
+          {
+            ...market.outcomes[1],
+            probability: probabilities.noProbability,
+          },
+        ],
+        totalVolume: marketInfo.totalCollateral
+          ? parseFloat(formatUnits(marketInfo.totalCollateral, DEFAULT_CONFIG.tokenDecimals))
+          : market.totalVolume,
+        endDate: new Date(marketInfo.endTime * 1000).toISOString(),
+        resolved: marketInfo.resolved,
+        result: marketInfo.result === Outcome.YES ? "YES" : marketInfo.result === Outcome.NO ? "NO" : undefined,
+      };
+    }
+    return market;
+  }, [market, marketInfo, probabilities]);
 
   if (!market) {
     return (
@@ -65,17 +111,36 @@ const MarketDetail = () => {
               />
               <div className="flex-1">
                 <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
-                  {market.title}
+                  {displayMarket?.title || market.title}
                 </h1>
+                {marketInfo && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {marketInfo.question}
+                  </p>
+                )}
                 <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1.5">
                     <Zap className="h-4 w-4" />
-                    {formatVolume(market.totalVolume)} Volume
+                    {formatVolume(displayMarket?.totalVolume || market.totalVolume)} Volume
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4" />
-                    Ends {new Date(market.endDate).toLocaleDateString()}
+                    Ends{" "}
+                    {marketInfo
+                      ? new Date(marketInfo.endTime * 1000).toLocaleDateString()
+                      : new Date(market.endDate).toLocaleDateString()}
                   </div>
+                  {marketInfo?.resolved && (
+                    <div className="flex items-center gap-1.5 text-primary">
+                      <AlertCircle className="h-4 w-4" />
+                      Résolu: {marketInfo.result === Outcome.YES ? "YES" : "NO"}
+                    </div>
+                  )}
+                  {currentPrice && (
+                    <div className="flex items-center gap-1.5">
+                      Prix actuel: ${(Number(currentPrice) / 1e8).toLocaleString()}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -93,13 +158,44 @@ const MarketDetail = () => {
               <PriceChart data={priceHistory} market={market} />
             </div>
 
+            {/* Market Data Error */}
+            {marketDataError && contractAddress && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{marketDataError}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* User Positions */}
+            {isConnected && userBalances && (
+              <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
+                <h2 className="mb-3 font-display text-lg font-semibold text-foreground">
+                  Vos positions
+                </h2>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>YES:</span>
+                    <span className="font-semibold">
+                      {formatUnits(userBalances.yesBalance, DEFAULT_CONFIG.tokenDecimals)} USDC
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>NO:</span>
+                    <span className="font-semibold">
+                      {formatUnits(userBalances.noBalance, DEFAULT_CONFIG.tokenDecimals)} USDC
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Outcome Table */}
             <div>
               <h2 className="mb-4 font-display text-lg font-semibold text-foreground">
                 Outcomes
               </h2>
               <OutcomeTable
-                market={market}
+                market={displayMarket || market}
                 selectedOutcome={selectedOutcome}
                 onSelectOutcome={setSelectedOutcome}
               />
@@ -123,9 +219,10 @@ const MarketDetail = () => {
           {/* Trading Panel - Sticky on Desktop */}
           <div className="lg:sticky lg:top-24 lg:self-start">
             <TradingPanel
-              market={market}
+              market={displayMarket || market}
               selectedOutcome={selectedOutcome}
               onSelectOutcome={setSelectedOutcome}
+              contractAddress={contractAddress || undefined}
             />
 
             {/* Related Markets */}

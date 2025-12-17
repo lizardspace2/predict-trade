@@ -8,7 +8,13 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:mumbai": "hardhat run scripts/deploy.ts --network mumbai",
+    "deploy:arbitrum": "hardhat run scripts/deploy.ts --network arbitrumGoerli",
+    "deploy:bnb": "hardhat run scripts/deploy.ts --network bnbTestnet",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
+    "compile": "hardhat compile",
+    "verify": "hardhat verify"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

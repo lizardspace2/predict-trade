@@ -2,6 +2,7 @@ import { Search, Menu, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link } from "react-router-dom";
+import { ConnectWallet } from "@/components/ConnectWallet";
 
 const navItems = [
   { label: "Trending", icon: TrendingUp, href: "/" },
@@ -54,12 +55,7 @@ export const Header = () => {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="hidden sm:flex">
-            Log In
-          </Button>
-          <Button size="sm" className="font-semibold">
-            Sign Up
-          </Button>
+          <ConnectWallet />
           <Button variant="ghost" size="icon" className="lg:hidden">
             <Menu className="h-5 w-5" />
           </Button>

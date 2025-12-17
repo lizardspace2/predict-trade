@@ -1,166 +1,197 @@
 import { useState } from "react";
+import { useWallet } from "@/hooks/useWallet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle, Wallet } from "lucide-react";
+import { placeBet, STABLE_COIN_ADDRESSES } from "@/web3/contracts";
 import { Market, MarketOutcome } from "@/data/mockMarkets";
-import { cn } from "@/lib/utils";
 
 interface TradingPanelProps {
   market: Market;
   selectedOutcome?: MarketOutcome;
-  onSelectOutcome: (outcome: MarketOutcome) => void;
+  onSelectOutcome?: (outcome: MarketOutcome) => void;
+  contractAddress?: string; // Adresse du contrat de prédiction (optionnel pour l'instant)
 }
 
-export const TradingPanel = ({
-  market,
-  selectedOutcome,
+export function TradingPanel({ 
+  market, 
+  selectedOutcome: propSelectedOutcome, 
   onSelectOutcome,
-}: TradingPanelProps) => {
-  const [mode, setMode] = useState<"buy" | "sell">("buy");
-  const [side, setSide] = useState<"yes" | "no">("yes");
+  contractAddress 
+}: TradingPanelProps) {
+  const { address, chainId, isConnected, provider } = useWallet();
+  const [selectedOutcomeIndex, setSelectedOutcomeIndex] = useState<number | null>(
+    propSelectedOutcome ? market.outcomes.findIndex(o => o.id === propSelectedOutcome.id) : null
+  );
   const [amount, setAmount] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const outcome = selectedOutcome || market.outcomes[0];
-  const yesPrice = outcome.probability;
-  const noPrice = 100 - outcome.probability;
+  const handleSelectOutcome = (index: number) => {
+    setSelectedOutcomeIndex(index);
+    if (onSelectOutcome) {
+      onSelectOutcome(market.outcomes[index]);
+    }
+  };
 
-  const currentPrice = side === "yes" ? yesPrice : noPrice;
-  const shares = amount ? (parseFloat(amount) / currentPrice) * 100 : 0;
-  const potentialPayout = shares;
+  const handlePlaceBet = async () => {
+    if (!isConnected || !address || !provider) {
+      setError("Veuillez connecter votre wallet");
+      return;
+    }
 
-  const quickAmounts = [1, 20, 100];
+    if (!contractAddress) {
+      setError("Adresse du contrat non configurée. Cette fonctionnalité nécessite un contrat déployé.");
+      return;
+    }
+
+    if (selectedOutcomeIndex === null) {
+      setError("Veuillez sélectionner un outcome");
+      return;
+    }
+
+    if (!amount || parseFloat(amount) <= 0) {
+      setError("Veuillez entrer un montant valide");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const txHash = await placeBet(
+        provider, 
+        contractAddress, 
+        market.id, 
+        selectedOutcomeIndex, 
+        amount
+      );
+      setSuccess(`Pari placé avec succès! TX: ${txHash}`);
+      setAmount("");
+      setSelectedOutcomeIndex(null);
+    } catch (err: any) {
+      setError(err.message || "Erreur lors du placement du pari");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isConnected) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Connecter votre wallet</CardTitle>
+          <CardDescription>
+            Connectez votre wallet pour placer des paris sur ce marché
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <Wallet className="h-4 w-4" />
+            <AlertDescription>
+              Veuillez connecter votre wallet pour continuer
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const stableCoins = chainId ? STABLE_COIN_ADDRESSES[chainId] : null;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      {/* Selected Outcome */}
-      <div className="mb-4 flex items-center gap-3">
-        <img
-          src={market.imageUrl}
-          alt=""
-          className="h-10 w-10 rounded-lg object-cover"
-        />
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-muted-foreground line-clamp-1">
-            {market.title}
-          </p>
-          <p className="font-display font-semibold text-foreground">
-            {outcome.name}
-          </p>
-        </div>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Placer un pari</CardTitle>
+        <CardDescription>
+          Sélectionnez un outcome et le montant à parier
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {/* Buy/Sell Toggle */}
-      <div className="mb-4 flex rounded-lg bg-secondary p-1">
-        <button
-          onClick={() => setMode("buy")}
-          className={cn(
-            "flex-1 rounded-md py-2 text-sm font-medium transition-all",
-            mode === "buy"
-              ? "bg-card text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Buy
-        </button>
-        <button
-          onClick={() => setMode("sell")}
-          className={cn(
-            "flex-1 rounded-md py-2 text-sm font-medium transition-all",
-            mode === "sell"
-              ? "bg-card text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Sell
-        </button>
-      </div>
+        {success && (
+          <Alert>
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
 
-      {/* Yes/No Selection */}
-      <div className="mb-4 grid grid-cols-2 gap-2">
-        <Button
-          variant={side === "yes" ? "yes" : "yes-outline"}
-          onClick={() => setSide("yes")}
-          className="h-12 text-base"
-        >
-          Yes {yesPrice}¢
-        </Button>
-        <Button
-          variant={side === "no" ? "no" : "no-outline"}
-          onClick={() => setSide("no")}
-          className={cn(
-            "h-12 text-base",
-            side === "no" && "bg-danger text-danger-foreground"
-          )}
-        >
-          No {noPrice}¢
-        </Button>
-      </div>
-
-      {/* Amount Input */}
-      <div className="mb-3">
-        <label className="mb-2 block text-sm text-muted-foreground">
-          Amount
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">
-            $
-          </span>
-          <Input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0"
-            className="h-14 pl-8 pr-4 text-right text-2xl font-display font-bold"
-          />
-        </div>
-      </div>
-
-      {/* Quick Amount Buttons */}
-      <div className="mb-4 flex gap-2">
-        {quickAmounts.map((value) => (
-          <button
-            key={value}
-            onClick={() => setAmount(String(parseFloat(amount || "0") + value))}
-            className="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            +${value}
-          </button>
-        ))}
-        <button
-          onClick={() => setAmount("1000")}
-          className="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          Max
-        </button>
-      </div>
-
-      {/* Summary */}
-      {amount && parseFloat(amount) > 0 && (
-        <div className="mb-4 space-y-2 rounded-lg bg-secondary/50 p-3">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Shares</span>
-            <span className="font-medium">{shares.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Potential payout</span>
-            <span className="font-semibold text-success">
-              ${potentialPayout.toFixed(2)}
-            </span>
+        <div className="space-y-2">
+          <Label>Outcome</Label>
+          <div className="grid grid-cols-1 gap-2">
+            {market.outcomes.map((outcome, index) => (
+              <Button
+                key={outcome.id}
+                variant={selectedOutcomeIndex === index ? "default" : "outline"}
+                onClick={() => handleSelectOutcome(index)}
+                disabled={loading}
+                className="w-full justify-between"
+              >
+                <span>{outcome.name}</span>
+                <span className="text-xs opacity-75">{outcome.probability}%</span>
+              </Button>
+            ))}
           </div>
         </div>
-      )}
 
-      {/* Trade Button */}
-      <Button variant="trade" size="xl" className="w-full">
-        {mode === "buy" ? "Trade" : "Sell"}
-      </Button>
+        <div className="space-y-2">
+          <Label htmlFor="amount">Montant</Label>
+          <div className="flex gap-2">
+            <Input
+              id="amount"
+              type="number"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={loading}
+              step="0.01"
+              min="0"
+            />
+            <div className="flex items-center text-sm text-muted-foreground">
+              {stableCoins ? "USDT/USDC" : "Tokens"}
+            </div>
+          </div>
+        </div>
 
-      {/* Terms */}
-      <p className="mt-3 text-center text-xs text-muted-foreground">
-        By trading, you agree to the{" "}
-        <a href="#" className="underline hover:text-foreground">
-          Terms of Use
-        </a>
-      </p>
-    </div>
+        {chainId && (
+          <div className="text-xs text-muted-foreground">
+            Réseau: {chainId === 1 ? "Ethereum" : chainId === 137 ? "Polygon" : `Chain ${chainId}`}
+          </div>
+        )}
+
+        <Button
+          onClick={handlePlaceBet}
+          disabled={loading || selectedOutcomeIndex === null || !amount}
+          className="w-full"
+        >
+          {loading ? "Traitement..." : "Placer le pari"}
+        </Button>
+
+        {!contractAddress && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              ⚠️ Adresse du contrat non configurée. Configurez-la dans le composant.
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
   );
-};
+}

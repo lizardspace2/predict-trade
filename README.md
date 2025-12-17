@@ -59,6 +59,44 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Web3Modal + WalletConnect (for multi-chain wallet connection)
+- ethers v6
+
+## Web3 Wallet Configuration
+
+This project includes Web3Modal integration for connecting wallets across multiple EVM chains (Ethereum, Polygon, BNB Chain, Arbitrum, Optimism).
+
+### Setup Instructions
+
+1. **Get a WalletConnect Project ID**:
+   - Visit [WalletConnect Cloud](https://cloud.walletconnect.com)
+   - Create a free account and create a new project
+   - Copy your Project ID
+
+2. **Configure Environment Variable**:
+   - Create a `.env` file in the root directory
+   - Add your Project ID:
+     ```
+     VITE_WALLETCONNECT_PROJECT_ID=your_project_id_here
+     ```
+   - Or update `src/web3/config.ts` directly (not recommended for production)
+
+3. **Supported Wallets**:
+   - MetaMask
+   - Trust Wallet
+   - Coinbase Wallet
+   - Rainbow Wallet
+   - WalletConnect (mobile QR code)
+   - And 300+ other wallets
+
+4. **Supported Chains**:
+   - Ethereum Mainnet
+   - Polygon
+   - BNB Chain
+   - Arbitrum
+   - Optimism
+
+The wallet connection button is available in the header. Click "Connect Wallet" to connect your preferred wallet.
 
 ## How can I deploy this project?
 
